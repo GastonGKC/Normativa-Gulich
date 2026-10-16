@@ -1,0 +1,578 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Normativa Gulich - Visualizador Interactivo</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- vis-network CDN -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- PapaParse para CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        #network-container {
+            width: 100%;
+            height: 680px;
+            background-color: #0f172a;
+            border-radius: 0.75rem;
+            position: relative;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen flex flex-col">
+
+
+    <!-- Header -->
+    <header class="bg-slate-800 border-b border-slate-700 shadow-lg px-6 py-4 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-2.5 rounded-lg shadow-md">
+                    <i data-lucide="network" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white">Normativa Gulich</h1>
+                    <p class="text-xs text-blue-300 font-medium">Por Mgter. Gastón González Kriegel & Gemini</p>
+                    <p class="text-[11px] text-slate-400">Instituto de Altos Estudios Espaciales "Mario Gulich" (CONAE / UNC)</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <div class="bg-slate-900 p-1 rounded-lg border border-slate-700 flex gap-1">
+                    <button id="btn-tab-graph" onclick="switchTab('graph')" class="px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 bg-blue-600 text-white shadow">
+                        <i data-lucide="git-fork" class="w-4 h-4"></i> Grafo de Red
+                    </button>
+                    <button id="btn-tab-cards" onclick="switchTab('cards')" class="px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800">
+                        <i data-lucide="grid" class="w-4 h-4"></i> Catálogo / Mosaico
+                    </button>
+                </div>
+
+
+                <label class="bg-slate-700 hover:bg-slate-600 border border-slate-600 text-xs px-3 py-2 rounded-lg cursor-pointer transition flex items-center gap-2 text-slate-200">
+                    <i data-lucide="upload" class="w-4 h-4"></i> Cargar CSV
+                    <input type="file" id="csv-file-input" accept=".csv" class="hidden" onchange="handleCSVUpload(event)">
+                </label>
+            </div>
+        </div>
+    </header>
+
+
+    <!-- Main Layout -->
+    <main class="max-w-7xl mx-auto w-full px-4 py-6 flex-1 flex flex-col gap-6">
+
+
+        <!-- Controls & Filters Bar -->
+        <section class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 shadow-sm backdrop-blur relative z-30">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                
+                <!-- Search Input with Help Trigger -->
+                <div class="md:col-span-2 relative">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+                    <input type="text" id="search-input" onkeyup="applyFilters()" placeholder="Buscar palabras clave, códigos o temas..." 
+                        class="w-full pl-9 pr-10 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition">
+                    
+                    <button onclick="toggleSearchHelp()" title="Ayuda de búsqueda" class="absolute right-2.5 top-2 text-slate-400 hover:text-blue-400 transition p-1 rounded-md hover:bg-slate-800">
+                        <i data-lucide="help-circle" class="w-4 h-4"></i>
+                    </button>
+
+
+                    <!-- Search Help Popup (Superpuesto en capa z-50) -->
+                    <div id="search-help-popup" class="hidden absolute left-0 top-12 w-full z-50 bg-slate-900 border border-blue-500/60 rounded-xl p-4 shadow-2xl backdrop-blur-md text-xs text-slate-300">
+                        <div class="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
+                            <span class="font-bold text-blue-400 flex items-center gap-1.5">
+                                <i data-lucide="lightbulb" class="w-4 h-4"></i> ¿Cómo buscar normativas?
+                            </span>
+                            <button onclick="toggleSearchHelp()" class="text-slate-400 hover:text-white">
+                                <i data-lucide="x" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        <p class="mb-2 text-slate-400">Podés ingresar cualquier término. El buscador filtra simultáneamente por códigos, títulos, temas y puntos clave:</p>
+                        <ul class="space-y-1.5 list-disc list-inside text-slate-300 font-mono text-[11px]">
+                            <li><strong class="text-blue-300">Por Código:</strong> <code class="bg-slate-800 px-1 py-0.5 rounded">RHCS 62/2019</code>, <code class="bg-slate-800 px-1 py-0.5 rounded">Ley 24521</code></li>
+                            <li><strong class="text-blue-300">Por Palabras Clave:</strong> <code class="bg-slate-800 px-1 py-0.5 rounded">posgrado</code>, <code class="bg-slate-800 px-1 py-0.5 rounded">estudiantes trabajadores</code></li>
+                            <li><strong class="text-blue-300">Por Tema o Entidad:</strong> <code class="bg-slate-800 px-1 py-0.5 rounded">CONAE</code>, <code class="bg-slate-800 px-1 py-0.5 rounded">CONEAU</code>, <code class="bg-slate-800 px-1 py-0.5 rounded">MAIE</code></li>
+                        </ul>
+                    </div>
+                </div>
+
+
+                <!-- Filter Level 1 -->
+                <div>
+                    <select id="filter-level" onchange="applyFilters()" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition">
+                        <option value="">Todos los Niveles</option>
+                        <option value="1. Nación">1. Nación</option>
+                        <option value="2. UNC">2. UNC</option>
+                        <option value="3. Gulich">3. Gulich</option>
+                    </select>
+                </div>
+
+
+                <!-- Filter Category -->
+                <div>
+                    <select id="filter-category" onchange="applyFilters()" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition">
+                        <option value="">Todas las Categorías</option>
+                        <option value="1. Gestión Institucional">1. Gestión Institucional</option>
+                        <option value="2. Oferta Académica">2. Oferta Académica</option>
+                        <option value="3. Estudiantes y Egresados">3. Estudiantes y Egresados</option>
+                        <option value="4. Docencia">4. Docencia</option>
+                        <option value="5. Investigación, CyT y Transferencia">5. Investigación, CyT y Transferencia</option>
+                        <option value="6. Normativa General">6. Normativa General</option>
+                    </select>
+                </div>
+            </div>
+
+
+            <!-- Stats Bar -->
+            <div class="mt-3 pt-3 border-t border-slate-700/50 flex justify-between items-center text-xs text-slate-400">
+                <div>
+                    Mostrando <span id="stat-count" class="font-bold text-blue-400">0</span> de <span id="stat-total" class="font-bold text-slate-200">0</span> normativas
+                </div>
+                <div class="flex items-center gap-4">
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span> Nación (Nivel 1)</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cyan-500"></span> UNC (Nivel 2)</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Gulich (Nivel 3)</span>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- VIEW 1: GRAPH VIEW -->
+        <div id="view-graph" class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
+            <div class="lg:col-span-2 relative bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-xl flex flex-col">
+                <div id="network-container" class="flex-1"></div>
+                <div class="absolute top-3 right-3 bg-slate-900/80 backdrop-blur border border-slate-700 text-xs px-3 py-1.5 rounded-md text-slate-300 flex items-center gap-2 pointer-events-none">
+                    <i data-lucide="info" class="w-3.5 h-3.5 text-blue-400"></i> Poné el cursor sobre un nodo para ver el título o hacé clic para abrir su ficha.
+                </div>
+            </div>
+
+
+            <!-- Detail Sidebar -->
+            <div class="bg-slate-800/90 border border-slate-700 rounded-xl p-5 shadow-xl flex flex-col h-[680px]">
+                <div class="flex justify-between items-center border-b border-slate-700 pb-3 mb-4">
+                    <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="file-text" class="w-4 h-4 text-blue-400"></i> Ficha Analítica
+                    </h2>
+                    <span id="detail-level-badge" class="px-2 py-0.5 rounded text-xs font-semibold bg-slate-700 text-slate-300">Seleccionar norma</span>
+                </div>
+
+
+                <div id="detail-content" class="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1 text-sm text-slate-300">
+                    <div class="text-center py-20 text-slate-500 flex flex-col items-center gap-3">
+                        <i data-lucide="mouse-pointer-click" class="w-10 h-10 stroke-1 text-slate-600"></i>
+                        <p>Hacé clic en un nodo del gráfico o en una tarjeta del catálogo para ver la ficha analítica completa y enlaces al PDF.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- VIEW 2: CARDS CATALOG VIEW -->
+        <div id="view-cards" class="hidden">
+            <div id="cards-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+        </div>
+
+
+    </main>
+
+
+    <script>
+        let allData = [];
+        let filteredData = [];
+        let network = null;
+        let nodesDataset = null;
+        let edgesDataset = null;
+
+
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            loadDefaultCSV();
+        });
+
+
+        function toggleSearchHelp() {
+            const popup = document.getElementById('search-help-popup');
+            popup.classList.toggle('hidden');
+        }
+
+
+        function loadDefaultCSV() {
+            Papa.parse("Dataset_Visualizador.csv", {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        processRawData(results.data);
+                    }
+                },
+                error: function() {
+                    console.log("Cargue el archivo CSV con el botón superior.");
+                }
+            });
+        }
+
+
+        function processRawData(data) {
+            allData = data.map(item => ({
+                id: String(item.ID || "").trim(),
+                level1: String(item["Nivel 1"] || "").trim(),
+                level2: String(item["Nivel 2"] || "").trim(),
+                code: String(item["Código de Norma"] || item.ID || "").trim(),
+                year: parseInt(item["Año"]) || 2000,
+                date: item["Fecha"] || "",
+                title: String(item["Título / Tema"] || "").trim(),
+                category: String(item["Categoría"] || "").trim(),
+                description: String(item["Descripción / Puntos clave"] || "").trim(),
+                link: String(item["Enlace"] || "").trim(),
+                relation: String(item["Relación"] || "").trim(),
+                relatedId: String(item["ID Norma Relacionada"] || "").trim()
+            })).filter(item => item.id !== "" && item.id !== "Nivel 1");
+
+
+            // Ordenamiento base por fecha/año (de más antigua a más reciente)
+            allData.sort((a, b) => a.year - b.year);
+
+
+            document.getElementById('stat-total').innerText = allData.length;
+            applyFilters();
+        }
+
+
+        function switchTab(tab) {
+            const btnGraph = document.getElementById('btn-tab-graph');
+            const btnCards = document.getElementById('btn-tab-cards');
+            const viewGraph = document.getElementById('view-graph');
+            const viewCards = document.getElementById('view-cards');
+
+
+            if (tab === 'graph') {
+                viewGraph.classList.remove('hidden');
+                viewCards.classList.add('hidden');
+                btnGraph.className = "px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 bg-blue-600 text-white shadow";
+                btnCards.className = "px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800";
+                if (network) network.redraw();
+            } else {
+                viewGraph.classList.add('hidden');
+                viewCards.classList.remove('hidden');
+                btnCards.className = "px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 bg-blue-600 text-white shadow";
+                btnGraph.className = "px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800";
+            }
+        }
+
+
+        function applyFilters() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const level = document.getElementById('filter-level').value;
+            const category = document.getElementById('filter-category').value;
+
+
+            filteredData = allData.filter(item => {
+                const matchesQuery = !query || 
+                    item.code.toLowerCase().includes(query) ||
+                    item.title.toLowerCase().includes(query) ||
+                    item.description.toLowerCase().includes(query) ||
+                    item.id.toLowerCase().includes(query);
+
+
+                const matchesLevel = !level || item.level1 === level;
+                const matchesCategory = !category || item.category === category;
+
+
+                return matchesQuery && matchesLevel && matchesCategory;
+            });
+
+
+            document.getElementById('stat-count').innerText = filteredData.length;
+
+
+            renderGraph();
+            renderCards();
+        }
+
+
+        function getNodeColor(level1) {
+            if (level1.includes("Nación")) return { background: '#4f46e5', border: '#6366f1' };
+            if (level1.includes("UNC")) return { background: '#0891b2', border: '#06b6d4' };
+            if (level1.includes("Gulich")) return { background: '#059669', border: '#10b981' };
+            return { background: '#475569', border: '#64748b' };
+        }
+
+
+        function getLevelColumnIndex(level1) {
+            if (level1.includes("Nación")) return 1;
+            if (level1.includes("UNC")) return 2;
+            if (level1.includes("Gulich")) return 3;
+            return 1;
+        }
+
+
+        function renderGraph() {
+            const container = document.getElementById('network-container');
+            const nodes = [];
+            const edges = [];
+            const visibleIds = new Set(filteredData.map(d => d.id));
+
+
+            filteredData.forEach(item => {
+                const colors = getNodeColor(item.level1);
+                const colIndex = getLevelColumnIndex(item.level1);
+
+
+                // Tooltip limpio y descriptivo al pasar el cursor
+                const hoverTooltip = `${item.code}\n------------------------------\nTítulo/Tema: ${item.title}\nAño: ${item.year}`;
+
+
+                nodes.push({
+                    id: item.id,
+                    label: item.code.length > 24 ? item.code.substring(0, 22) + "..." : item.code,
+                    title: hoverTooltip,
+                    shape: 'box',
+                    margin: 10,
+                    level: colIndex, // Define la columna en la estructura jerárquica
+                    color: {
+                        background: colors.background,
+                        border: colors.border,
+                        highlight: { background: '#2563eb', border: '#60a5fa' }
+                    },
+                    font: { color: '#ffffff', size: 11, face: 'sans-serif' },
+                    borderWidth: 2,
+                    shadow: true
+                });
+
+
+                // Aristas limpias sin texto entorpecedor sobre las flechas
+                if (item.relatedId && item.relatedId !== "nc" && visibleIds.has(item.relatedId)) {
+                    edges.push({
+                        from: item.id,
+                        to: item.relatedId,
+                        arrows: 'to',
+                        color: { color: '#475569', highlight: '#3b82f6' },
+                        width: 1.5,
+                        smooth: { type: 'cubicBezier' }
+                    });
+                }
+            });
+
+
+            nodesDataset = new vis.DataSet(nodes);
+            edgesDataset = new vis.DataSet(edges);
+
+
+            const data = { nodes: nodesDataset, edges: edgesDataset };
+            
+            // Configuración del Diagrama Jerárquico Estable (De Izquierda a Derecha por Nivel, Orden de Arriba a Abajo)
+            const options = {
+                layout: {
+                    hierarchical: {
+                        enabled: true,
+                        direction: 'LR', // De Izquierda a Derecha (Nación -> UNC -> Gulich)
+                        sortMethod: 'directed',
+                        nodeSpacing: 80,
+                        levelSeparation: 220
+                    }
+                },
+                physics: {
+                    enabled: false // Desactiva la física caótica para que NO se muevan al buscar
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 50,
+                    zoomView: true,
+                    dragView: true
+                }
+            };
+
+
+            network = new vis.Network(container, data, options);
+
+
+            network.on("selectNode", function (params) {
+                if (params.nodes.length > 0) {
+                    showDetail(params.nodes[0]);
+                }
+            });
+        }
+
+
+        function renderCards() {
+            const grid = document.getElementById('cards-grid');
+            grid.innerHTML = "";
+
+
+            if (filteredData.length === 0) {
+                grid.innerHTML = `<div class="col-span-full text-center py-12 text-slate-500">No se encontraron normativas que coincidan con la búsqueda.</div>`;
+                return;
+            }
+
+
+            filteredData.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "bg-slate-800 border border-slate-700/80 hover:border-blue-500 rounded-xl p-5 shadow-lg transition duration-200 flex flex-col justify-between cursor-pointer group";
+                card.onclick = () => {
+                    showDetail(item.id);
+                    switchTab('graph');
+                };
+
+
+                let linkHref = extractLink(item.link);
+
+
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start gap-2 mb-2">
+                            <span class="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-900 text-blue-400 border border-slate-700">
+                                ${item.code}
+                            </span>
+                            <span class="text-xs text-slate-400 font-mono">${item.year}</span>
+                        </div>
+                        <h3 class="font-semibold text-slate-100 group-hover:text-blue-400 transition text-sm mb-2 line-clamp-2">
+                            ${item.title}
+                        </h3>
+                        <p class="text-xs text-slate-400 line-clamp-3 mb-4 leading-relaxed">
+                            ${item.description}
+                        </p>
+                    </div>
+
+
+                    <div class="pt-3 border-t border-slate-700/60 flex justify-between items-center text-xs text-slate-400">
+                        <span class="text-slate-500 truncate max-w-[180px]">${item.category}</span>
+                        ${linkHref ? `<a href="${linkHref}" target="_blank" onclick="event.stopPropagation()" class="text-blue-400 hover:underline flex items-center gap-1 font-medium"><i data-lucide="external-link" class="w-3.5 h-3.5"></i> PDF</a>` : ''}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+
+            lucide.createIcons();
+        }
+
+
+        function extractLink(rawLink) {
+            if (!rawLink) return null;
+            const match = rawLink.match(/https?:\/\/[^\s\)>\]]+/);
+            return match ? match[0] : null;
+        }
+
+
+        function showDetail(id) {
+            const item = allData.find(d => d.id === id);
+            if (!item) return;
+
+
+            if (network && nodesDataset) { network.selectNodes([id]); }
+
+
+            const badge = document.getElementById('detail-level-badge');
+            badge.innerText = item.level1;
+            badge.className = "px-2 py-0.5 rounded text-xs font-semibold " + 
+                (item.level1.includes("Nación") ? "bg-indigo-900/80 text-indigo-300" :
+                 item.level1.includes("UNC") ? "bg-cyan-900/80 text-cyan-300" : "bg-emerald-900/80 text-emerald-300");
+
+
+            const content = document.getElementById('detail-content');
+            let pdfLink = extractLink(item.link);
+
+
+            const relatedToThis = allData.filter(d => d.relatedId === id);
+            const thisRelatesTo = allData.find(d => d.id === item.relatedId);
+
+
+            content.innerHTML = `
+                <div class="space-y-4">
+                    <div>
+                        <div class="text-xs text-slate-400 font-mono mb-1">ID: ${item.id}</div>
+                        <h3 class="text-lg font-bold text-white leading-snug">${item.code}</h3>
+                        <p class="text-xs font-medium text-blue-400 mt-1">${item.title}</p>
+                    </div>
+
+
+                    <div class="grid grid-cols-2 gap-2 text-xs bg-slate-900/60 p-3 rounded-lg border border-slate-700/50">
+                        <div><span class="text-slate-500">Nivel 2:</span> <span class="font-medium text-slate-200 block">${item.level2 || '-'}</span></div>
+                        <div><span class="text-slate-500">Fecha:</span> <span class="font-medium text-slate-200 block">${item.date || item.year || '-'}</span></div>
+                        <div class="col-span-2 pt-1 border-t border-slate-800"><span class="text-slate-500">Categoría:</span> <span class="font-medium text-slate-200 block">${item.category || '-'}</span></div>
+                    </div>
+
+
+                    <div>
+                        <h4 class="text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                            <i data-lucide="align-left" class="w-3.5 h-3.5 text-blue-400"></i> Resumen & Puntos Clave
+                        </h4>
+                        <div class="bg-slate-900/40 p-3 rounded-lg border border-slate-700/40 text-xs text-slate-300 leading-relaxed">
+                            ${item.description}
+                        </div>
+                    </div>
+
+
+                    ${(thisRelatesTo || relatedToThis.length > 0) ? `
+                    <div>
+                        <h4 class="text-xs font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+                            <i data-lucide="git-commit" class="w-3.5 h-3.5 text-blue-400"></i> Vinculaciones Jurídicas
+                        </h4>
+                        <div class="space-y-2 text-xs">
+                            ${thisRelatesTo ? `
+                                <div class="bg-slate-900/60 p-2.5 rounded border border-slate-700/50 flex justify-between items-center cursor-pointer hover:border-blue-500" onclick="showDetail('${thisRelatesTo.id}')">
+                                    <div>
+                                        <span class="text-[10px] text-slate-500 block">${item.relation || 'Relacionada con'}</span>
+                                        <span class="font-semibold text-blue-300">${thisRelatesTo.code}</span>
+                                    </div>
+                                    <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-500"></i>
+                                </div>
+                            ` : ''}
+
+
+                            ${relatedToThis.map(rel => `
+                                <div class="bg-slate-900/60 p-2.5 rounded border border-slate-700/50 flex justify-between items-center cursor-pointer hover:border-blue-500" onclick="showDetail('${rel.id}')">
+                                    <div>
+                                        <span class="text-[10px] text-slate-500 block">${rel.relation || 'Es vinculada por'}</span>
+                                        <span class="font-semibold text-emerald-300">${rel.code}</span>
+                                    </div>
+                                    <i data-lucide="arrow-left" class="w-3.5 h-3.5 text-slate-500"></i>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+
+
+                    ${pdfLink ? `
+                    <div class="pt-2">
+                        <a href="${pdfLink}" target="_blank" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 px-4 rounded-lg text-xs flex items-center justify-center gap-2 shadow-lg transition">
+                            <i data-lucide="file-text" class="w-4 h-4"></i> Abrir Documento Completo (PDF)
+                        </a>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+
+
+            lucide.createIcons();
+        }
+
+
+        function handleCSVUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        processRawData(results.data);
+                        alert(`¡Éxito! Se cargaron ${results.data.length} normativas desde el archivo.`);
+                    }
+                },
+                error: function(err) {
+                    alert("Error al procesar el archivo CSV: " + err.message);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
